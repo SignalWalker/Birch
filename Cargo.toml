@@ -1,0 +1,6 @@
+[package]
+name = "birch"
+version = "0.1.0"
+authors = ["Ash Walker <ash@ashwalker.net>"]
+
+[dependencies]
