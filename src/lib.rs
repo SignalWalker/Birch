@@ -1,5 +1,3 @@
-#![feature(pin)]
-
 // pub extern crate petgraph;
 
 use std::collections::VecDeque;
@@ -340,7 +338,7 @@ impl<L: Debug> Debug for Tree<L> {
             branch: usize,
             depth: usize,
         ) -> Result<(), Error> {
-            writeln!(f, "{}{} :: {:?}", tab(depth), branch, tree[branch].value);
+            writeln!(f, "{}{} :: {:?}", tab(depth), branch, tree[branch].value).unwrap();
             for leaf in tree[branch].leaves() {
                 recurse(tree, f, *leaf, depth + 1)?
             }
