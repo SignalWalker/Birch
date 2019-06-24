@@ -3,8 +3,12 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+mod edge;
 mod tree;
+mod vert;
+pub use edge::*;
 pub use tree::*;
+pub use vert::*;
 
 pub trait Flow {
     const DIR: bool;
@@ -28,172 +32,6 @@ pub enum Direction {
     In,
     Out,
     None,
-}
-
-pub struct Vertex<V> {
-    pub index: usize,
-    pub val: V,
-    pub edges: Vec<usize>,
-}
-
-impl<V> Deref for Vertex<V> {
-    type Target = V;
-    fn deref(&self) -> &Self::Target {
-        &self.val
-    }
-}
-
-impl<V> DerefMut for Vertex<V> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.val
-    }
-}
-
-impl<V: Debug> Debug for Vertex<V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Vertex")
-            .field("index", &self.index)
-            .field("val", &self.val)
-            .field("edges", &self.edges)
-            .finish()
-    }
-}
-
-pub struct EdgeIter<'v, 'g, V, E, F: Flow> {
-    vert: &'v Vertex<V>,
-    graph: &'g Graph<V, E, F>,
-    dir: Direction,
-    i: usize,
-}
-
-impl<'v, 'g, V, E, F: Flow> Iterator for EdgeIter<'v, 'g, V, E, F> {
-    type Item = &'g Edge<E>;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.i < self.vert.edges.len() {
-            let edge = self.graph.edge(self.vert.edges[self.i]);
-            self.i += 1;
-            match self.dir {
-                Direction::None => return Some(edge),
-                Direction::Out => {
-                    if self.vert.index == edge.verts.0 {
-                        return Some(edge);
-                    }
-                }
-                Direction::In => {
-                    if self.vert.index == edge.verts.1 {
-                        return Some(edge);
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-
-impl<V> Vertex<V> {
-    pub fn edges<'v, 'g, E, F: Flow>(
-        &'v self,
-        graph: &'g Graph<V, E, F>,
-    ) -> EdgeIter<'v, 'g, V, E, F> {
-        EdgeIter {
-            vert: self,
-            graph,
-            dir: Direction::None,
-            i: 0,
-        }
-    }
-
-    pub fn outgoing<'v, 'g, E>(
-        &'v self,
-        graph: &'g Graph<V, E, Directed>,
-    ) -> EdgeIter<'v, 'g, V, E, Directed> {
-        EdgeIter {
-            vert: self,
-            graph,
-            dir: Direction::Out,
-            i: 0,
-        }
-    }
-
-    pub fn incoming<'v, 'g, E>(
-        &'v self,
-        graph: &'g Graph<V, E, Directed>,
-    ) -> EdgeIter<'v, 'g, V, E, Directed> {
-        EdgeIter {
-            vert: self,
-            graph,
-            dir: Direction::In,
-            i: 0,
-        }
-    }
-
-    // pub fn edges_mut<'e, E>(
-    //     &self,
-    //     graph: &'e mut Graph<V, E>,
-    // ) -> std::iter::Map<std::iter::Cloned<std::slice::Iter<usize>>, impl FnMut(usize) -> &'e mut E>
-    // {
-    //     self.edges.iter().cloned().map(|e| &mut graph.edges[e])
-    // }
-}
-
-pub struct Edge<E> {
-    pub index: usize,
-    pub weight: E,
-    /// 0 -> 1, if this is a directed edge
-    pub verts: (usize, usize),
-}
-
-impl<E: Debug> Debug for Edge<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Edge")
-            .field("index", &self.index)
-            .field("weight", &self.weight)
-            .field("verts", &self.verts)
-            .finish()
-    }
-}
-
-impl<E> Deref for Edge<E> {
-    type Target = E;
-    fn deref(&self) -> &Self::Target {
-        &self.weight
-    }
-}
-
-impl<E> DerefMut for Edge<E> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.weight
-    }
-}
-
-impl<E> Edge<E> {
-    pub fn new(index: usize, weight: E, from: usize, to: usize) -> Self {
-        Self {
-            index,
-            weight,
-            verts: (from, to),
-        }
-    }
-
-    pub fn start<'v, V>(&self, graph: &'v Graph<V, E>) -> &'v Vertex<V> {
-        graph.vert(self.verts.0)
-    }
-
-    pub fn end<'v, V>(&self, graph: &'v Graph<V, E>) -> &'v Vertex<V> {
-        graph.vert(self.verts.1)
-    }
-
-    pub fn verts<'v, V>(&self, graph: &'v Graph<V, E>) -> (&'v Vertex<V>, &'v Vertex<V>) {
-        (self.start(graph), self.end(graph))
-    }
-
-    pub fn start_mut<'v, V>(&self, graph: &'v mut Graph<V, E>) -> &'v mut Vertex<V> {
-        graph.vert_mut(self.verts.0)
-    }
-
-    pub fn end_mut<'v, V>(&self, graph: &'v mut Graph<V, E>) -> &'v mut Vertex<V> {
-        graph.vert_mut(self.verts.1)
-    }
 }
 
 #[derive(Default)]
@@ -301,8 +139,8 @@ impl<V, E, F: Flow> Graph<V, E, F> {
             self.edges[index] = Some(edge);
         }
         for vert in &[start, end] {
+            unimplemented!();
             let vert = self.vert_mut(*vert);
-
             vert.edges.push(index);
         }
         index
@@ -334,13 +172,5 @@ impl<V, E, F: Flow> Graph<V, E, F> {
     /// Split disconnected graph into connected regions.
     pub fn split(self) -> Vec<Self> {
         unimplemented!()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
     }
 }
