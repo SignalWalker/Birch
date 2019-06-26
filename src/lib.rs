@@ -81,6 +81,8 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         self.edges[i].as_mut().unwrap()
     }
 
+    /// Adds a vertex to the graph and returns its index, which is either self.verts.len()
+    /// or the old index of the most recently removed vert.
     pub fn add_vert(&mut self, vert: V) -> usize {
         let index = {
             match self.empty_v.pop() {
@@ -101,6 +103,9 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         index
     }
 
+    /// Removes a vertex, preserving indices.
+    /// # Returns
+    /// The removed vertex and all edges to/from it.
     pub fn rem_vert(&mut self, index: usize) -> (Vertex<V>, Vec<Edge<E>>) {
         let vert = self.verts[index].take().unwrap();
         let edges = vert
@@ -138,11 +143,12 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         } else {
             self.edges[index] = Some(edge);
         }
-        for vert in &[start, end] {
-            unimplemented!();
-            let vert = self.vert_mut(*vert);
-            vert.edges.push(index);
-        }
+        unimplemented!();
+        // for vert in &[start, end] {
+
+        //     let vert = self.vert_mut(*vert);
+        //     vert.edges.push(index);
+        // }
         index
     }
 
@@ -150,6 +156,7 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         self.insert_edge(start, weight, end, None, None)
     }
 
+    /// Remove an edge, preserving indices.
     pub fn rem_edge(&mut self, index: usize) -> Edge<E> {
         let edge = self.edges[index].take().unwrap();
         self.empty_e.push(index);
@@ -162,6 +169,12 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         edge
     }
 
+    /// Moves verts & edges into empty cells until there are no empty cells.
+    /// Does not preserve indices.
+    pub fn compress(&mut self) {
+        unimplemented!()
+    }
+
     /// Add another graph to this one as its own disconnected region.
     /// # Returns
     /// New indices of added vertices, in the same order in which they were in the old graph.
@@ -171,6 +184,11 @@ impl<V, E, F: Flow> Graph<V, E, F> {
 
     /// Split disconnected graph into connected regions.
     pub fn split(self) -> Vec<Self> {
+        unimplemented!()
+    }
+
+    /// Creates a new graph by removing a region from self.
+    pub fn isolate(&mut self, _index: usize) -> Self {
         unimplemented!()
     }
 }
