@@ -143,12 +143,14 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         } else {
             self.edges[index] = Some(edge);
         }
-        unimplemented!();
-        // for vert in &[start, end] {
-
-        //     let vert = self.vert_mut(*vert);
-        //     vert.edges.push(index);
-        // }
+        for (vert, pos) in &[(start, f_pos), (end, t_pos)] {
+            let vert = self.vert_mut(*vert);
+            let at = match pos {
+                Some(p) => std::cmp::min(*p, vert.edges.len()),
+                None => vert.edges.len(),
+            };
+            vert.edges.insert(at, index);
+        }
         index
     }
 
