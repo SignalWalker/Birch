@@ -158,6 +158,22 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         self.insert_edge(start, weight, end, None, None)
     }
 
+    pub fn set_edge(&mut self, start: usize, weight: E, end: usize) -> usize {
+        match self
+            .vert(start)
+            .edges(&self)
+            .map(|e| (e.index, e.verts))
+            .find(|(_, verts)| *verts == (start, end))
+        {
+            Some((index, _)) => {
+                let edge = self.edge_mut(index);
+                edge.weight = weight;
+                edge.index
+            }
+            None => self.add_edge(start, weight, end),
+        }
+    }
+
     /// Remove an edge, preserving indices.
     pub fn rem_edge(&mut self, index: usize) -> Edge<E> {
         let edge = self.edges[index].take().unwrap();
