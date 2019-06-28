@@ -144,6 +144,9 @@ impl<V, E, F: Flow> Graph<V, E, F> {
             self.edges[index] = Some(edge);
         }
         for (vert, pos) in &[(start, f_pos), (end, t_pos)] {
+            if start == end && *vert == end {
+                break;
+            }
             let vert = self.vert_mut(*vert);
             let at = match pos {
                 Some(p) => std::cmp::min(*p, vert.edges.len()),
@@ -158,7 +161,7 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         self.insert_edge(start, weight, end, None, None)
     }
 
-    pub fn set_edge(&mut self, start: usize, weight: E, end: usize) -> usize {
+    pub fn set_edge(&mut self, start: usize, mut weight: E, end: usize) -> (usize, Option<E>) {
         match self
             .vert(start)
             .edges(&self)
@@ -167,10 +170,10 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         {
             Some((index, _)) => {
                 let edge = self.edge_mut(index);
-                edge.weight = weight;
-                edge.index
+                std::mem::swap(&mut edge.weight, &mut weight);
+                (edge.index, Some(weight))
             }
-            None => self.add_edge(start, weight, end),
+            None => (self.add_edge(start, weight, end), None),
         }
     }
 
