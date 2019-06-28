@@ -52,7 +52,7 @@ impl<V> Tree<V> {
 }
 
 impl<V: Debug> Debug for Tree<V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
         unimplemented!()
     }
 }

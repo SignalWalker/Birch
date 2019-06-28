@@ -161,14 +161,21 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         self.insert_edge(start, weight, end, None, None)
     }
 
-    pub fn set_edge(&mut self, start: usize, mut weight: E, end: usize) -> (usize, Option<E>) {
-        match self
-            .vert(start)
-            .edges(&self)
-            .map(|e| (e.index, e.verts))
-            .find(|(_, verts)| *verts == (start, end))
-        {
-            Some((index, _)) => {
+    pub fn set_edge(&mut self, start: usize, weight: E, end: usize) -> (usize, Option<E>) {
+        self.replace_edge(start, weight, end, |e| {
+            e.verts == (start, end) || (!F::DIR && e.verts == (end, start))
+        })
+    }
+
+    pub fn replace_edge(
+        &mut self,
+        start: usize,
+        mut weight: E,
+        end: usize,
+        pred: impl FnMut(&&Edge<E>) -> bool,
+    ) -> (usize, Option<E>) {
+        match self.vert(start).edges(&self).find(pred).map(|e| e.index) {
+            Some(index) => {
                 let edge = self.edge_mut(index);
                 std::mem::swap(&mut edge.weight, &mut weight);
                 (edge.index, Some(weight))
