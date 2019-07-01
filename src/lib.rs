@@ -143,8 +143,8 @@ impl<V, E, F: Flow> Graph<V, E, F> {
         } else {
             self.edges[index] = Some(edge);
         }
-        for (vert, pos) in &[(start, f_pos), (end, t_pos)] {
-            if start == end && *vert == end {
+        for (i, (vert, pos)) in [(start, f_pos), (end, t_pos)].iter().enumerate() {
+            if start == end && i != 0 {
                 break;
             }
             let vert = self.vert_mut(*vert);
