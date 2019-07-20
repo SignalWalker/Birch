@@ -1,6 +1,5 @@
 use super::*;
 
-#[derive(Default)]
 pub struct Tree<V>(pub Graph<V, (), Directed>);
 
 impl<V> Tree<V> {
@@ -37,9 +36,12 @@ impl<V> Tree<V> {
         Self(self.0.isolate(index))
     }
 
-    pub fn parent(&self, child: usize) -> usize {
-        assert!(child != 0);
-        self.0.vert(child).incoming(&self.0).next().unwrap().verts.0
+    pub fn parent(&self, child: usize) -> Result<usize, usize> {
+        if child == 0 {
+            Err(0)
+        } else {
+            Ok(self.0.vert(child).incoming(&self.0).next().unwrap().verts.0)
+        }
     }
 
     pub fn children(&self, parent: usize) -> Vec<usize> {
