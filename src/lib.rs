@@ -1,401 +1,224 @@
-// pub extern crate petgraph;
-
-use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::fmt::Formatter;
-use std::ops::Add;
-use std::ops::Index;
-use std::ops::IndexMut;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::ops::DerefMut;
 
-#[derive(Debug)]
-pub struct Leaf<V> {
-    pub value: V,
-    branch: Option<usize>,
-    leaves: Vec<usize>,
+mod conv;
+mod edge;
+mod tree;
+mod vert;
+pub use conv::*;
+pub use edge::*;
+pub use tree::*;
+pub use vert::*;
+
+pub trait Flow {
+    const DIR: bool;
 }
 
-impl<V> Leaf<V> {
-    pub fn with_val(value: V) -> Leaf<V> {
-        Leaf {
-            value,
-            branch: None,
-            leaves: Vec::new(),
+macro_rules! flow {
+    ($i:ident, $d:literal) => {
+        #[derive(Debug, Default, Hash, Eq, PartialEq, Copy, Clone)]
+        pub struct $i;
+        impl Flow for $i {
+            const DIR: bool = $d;
         }
-    }
+    };
+}
 
-    /// Returns a clone of self.branch
-    pub fn branch(&self) -> Option<usize> {
-        self.branch
-    }
+flow!(Directed, true);
+flow!(Undirected, false);
 
-    pub fn leaves(&self) -> &[usize] {
-        &self.leaves[..]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Direction {
+    In,
+    Out,
+    None,
+}
+
+#[derive(Default)]
+pub struct Graph<V, E, F: Flow = Undirected> {
+    pub verts: Vec<Option<Vertex<V>>>,
+    pub edges: Vec<Option<Edge<E>>>,
+    empty_v: Vec<usize>,
+    empty_e: Vec<usize>,
+    flow: PhantomData<F>,
+}
+
+impl<V: Debug, E: Debug, F: Flow + Debug> Debug for Graph<V, E, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Graph")
+            .field("verts", &self.verts)
+            .field("edges", &self.edges)
+            .field("empty_v", &self.empty_v)
+            .field("empty_e", &self.empty_e)
+            .finish()
     }
 }
 
-impl<V> Index<usize> for Leaf<V> {
-    type Output = usize;
-    fn index(&self, index: usize) -> &usize {
-        &self.leaves[index]
-    }
-}
-
-/// Indices are stable across removal/insertion.
-pub struct Tree<L> {
-    clean: bool,
-    nodes: Vec<Option<Leaf<L>>>,
-}
-
-impl<L> Into<Vec<Option<Leaf<L>>>> for Tree<L> {
-    fn into(self) -> Vec<Option<Leaf<L>>> {
-        self.nodes
-    }
-}
-
-impl<L> From<Vec<Option<Leaf<L>>>> for Tree<L> {
-    fn from(vec: Vec<Option<Leaf<L>>>) -> Tree<L> {
-        Tree {
-            clean: false,
-            nodes: vec,
-        }
-    }
-}
-
-impl<L> Tree<L> {
-    pub fn with_root(root: L) -> Tree<L> {
-        Tree {
-            clean: true,
-            nodes: vec![Some(Leaf {
-                value: root,
-                branch: None,
-                leaves: Vec::new(),
-            })],
+impl<V, E, F: Flow> Graph<V, E, F> {
+    pub fn new() -> Self {
+        Self {
+            verts: Vec::new(),
+            edges: Vec::new(),
+            empty_v: Vec::new(),
+            empty_e: Vec::new(),
+            flow: PhantomData,
         }
     }
 
-    pub fn nodes(&self) -> &[Option<Leaf<L>>] {
-        &self.nodes[..]
+    pub fn vert(&self, i: usize) -> &Vertex<V> {
+        self.verts[i].as_ref().unwrap()
     }
 
-    pub fn insert(&mut self, branch: usize, index: usize, leaf: L) {
-        let nindex = self.size();
-        self.nodes.push(Some(Leaf::with_val(leaf)));
-        self[branch].leaves.insert(index, nindex);
-        let node = &mut self[nindex];
-        node.branch = Some(branch);
+    pub fn edge(&self, i: usize) -> &Edge<E> {
+        self.edges[i].as_ref().unwrap()
     }
 
-    pub fn insert_tree(&mut self, branch: usize, index: usize, mut tree: Tree<L>) {
-        if !tree.clean {
-            tree.clean();
-        }
-        let start = self.size();
-        self.nodes.append(&mut tree.nodes);
-        self[branch].leaves.insert(index, start);
+    pub fn vert_mut(&mut self, i: usize) -> &mut Vertex<V> {
+        self.verts[i].as_mut().unwrap()
+    }
 
-        // Since the nodes of the added tree are all going to be in one block on the end,
-        // we can just shift their internal references
-        for n in &mut self.nodes[start..] {
-            let mut n = n.as_mut().unwrap();
-            if let Some(ref mut b) = &mut n.branch {
-                *b += start
+    pub fn edge_mut(&mut self, i: usize) -> &mut Edge<E> {
+        self.edges[i].as_mut().unwrap()
+    }
+
+    /// Adds a vertex to the graph and returns its index, which is either self.verts.len()
+    /// or the old index of the most recently removed vert.
+    pub fn add_vert(&mut self, vert: V) -> usize {
+        let index = {
+            match self.empty_v.pop() {
+                Some(i) => i,
+                None => self.verts.len(),
             }
-            for leaf in n.leaves.iter_mut() {
-                *leaf += start
-            }
-        }
-
-        self[start].branch = Some(branch);
-    }
-
-    /// Add a leaf to the beginning of a node
-    pub fn queue(&mut self, branch: usize, leaf: L) {
-        self.insert(branch, 0, leaf);
-    }
-
-    /// Add a leaf to the end of a node
-    pub fn push(&mut self, branch: usize, leaf: L) {
-        let len = self[branch].leaves.len();
-        self.insert(branch, len, leaf)
-    }
-
-    /// Add a tree to the beginning of a node
-    pub fn queue_tree(&mut self, branch: usize, tree: Tree<L>) {
-        self.insert_tree(branch, 0, tree);
-    }
-
-    /// Add a tree to the end of a node
-    pub fn push_tree(&mut self, branch: usize, tree: Tree<L>) {
-        let len = self[branch].leaves.len();
-        self.insert_tree(branch, len, tree)
-    }
-
-    pub fn remove(&mut self, node: usize) -> Tree<L> {
-        // Alright so basically the reason this works is that we don't actually remove anything
-        // from the node list, so indices are stable
-        fn recurse<L>(from: &mut Tree<L>, to: &mut Tree<L>, new_p: usize, old_c: &[usize]) {
-            // for each leaf in old_c, take the leaf from the original tree and give it to me
-            // as n
-            for n in old_c
-                .iter()
-                .map(|i| from.nodes[*i].take().unwrap())
-                .collect::<Vec<Leaf<L>>>()
-            {
-                let (val, leaves) = (n.value, n.leaves);
-                to.queue(new_p, val);
-                let p = to.size() - 1;
-                recurse(from, to, p, &leaves[..])
-            }
-            // Because of the way this recurses, the tree created is "column-major"
-        }
-        {
-            let branch = self[node]
-                .branch
-                .expect("Tried to remove root || Tried to remove leaf with no branch");
-            let p_node = &mut self[branch];
-            let nindex = p_node.leaves.iter().position(|i| *i == node).unwrap();
-            p_node.leaves.remove(nindex);
-        }
-        let r_node = self.nodes[node].take().unwrap();
-        let (r_val, rc) = (r_node.value, r_node.leaves);
-        let mut res = Tree::with_root(r_val);
-        recurse(self, &mut res, 0, &rc[..]);
-        self.clean = false;
-        res
-    }
-
-    /// Removes Nones from self.nodes, fixes pointers in Somes, returns locations of removed objects
-    /// from largest index to smallest
-    pub fn clean(&mut self) -> VecDeque<usize> {
-        self.clean = true;
-        let mut res = VecDeque::new();
-        let mut i = 0;
-        let mut shift = 0;
-        while i < self.size() {
-            if self.nodes[i].is_none() {
-                res.push_front(i + shift);
-                self.nodes.remove(i);
-                i -= 1;
-                shift += 1;
-            }
-            i += 1;
-        }
-        let len = res.len();
-        for node in &mut self.nodes {
-            let mut node = node.as_mut().unwrap();
-            if let Some(ref mut b) = node.branch {
-                if *b >= res[len - 1] {
-                    for del in &res {
-                        if *b > *del {
-                            *b -= 1;
-                        }
-                    }
-                }
-            }
-            for leaf in &mut node.leaves {
-                if *leaf < res[len - 1] {
-                    continue;
-                }
-                for del in &res {
-                    if *leaf > *del {
-                        *leaf -= 1;
-                    }
-                }
-            }
-        }
-        res
-    }
-
-    pub fn size(&self) -> usize {
-        self.nodes.len()
-    }
-
-    pub fn first_nearest<C, N: Fn(&L, &C) -> bool>(&self, c: &C, near: N) -> usize
-    where
-        L: PartialEq<C>,
-    {
-        fn recurse<C, L: PartialEq<C>, N: Fn(&L, &C) -> bool>(
-            tree: &Tree<L>,
-            branch: usize,
-            c: &C,
-            near: N,
-        ) -> usize {
-            let leaves = {
-                let node = &tree[branch];
-                if node.value == *c {
-                    return branch;
-                }
-                node.leaves()
-            };
-            for leaf in leaves {
-                if near(&tree[*leaf].value, c) {
-                    return recurse(tree, *leaf, c, near);
-                }
-            }
-            branch
-        }
-        recurse(&self, 0, c, near)
-    }
-
-    pub fn find_or_insert<N: Fn(&L, &L) -> bool>(&mut self, l: L, near: N) -> usize
-    where
-        L: PartialEq,
-    {
-        fn recurse<L: PartialEq, N: Fn(&L, &L) -> bool>(
-            tree: &mut Tree<L>,
-            branch: usize,
-            l: L,
-            near: N,
-        ) -> usize {
-            let leaves: Vec<usize> = {
-                let node = &tree[branch];
-                if node.value == l {
-                    return branch;
-                }
-                node.leaves().to_vec()
-            };
-            for leaf in leaves {
-                if near(&tree[leaf].value, &l) {
-                    return recurse(tree, leaf, l, near);
-                }
-            }
-            tree.push(branch, l);
-            tree.size() - 1
-        }
-        recurse(self, 0, l, near)
-    }
-
-    pub fn all_nearest<C, N: Copy + Fn(&L, &C) -> bool>(&self, c: &C, near: N) -> Vec<usize>
-    where
-        L: PartialEq<C>,
-    {
-        fn recurse<C, L: PartialEq<C>, N: Copy + Fn(&L, &C) -> bool>(
-            tree: &Tree<L>,
-            branch: usize,
-            c: &C,
-            near: N,
-        ) -> Vec<usize> {
-            let mut res = vec![branch];
-            let leaves = {
-                let node = &tree[branch];
-                if node.value == *c {
-                    // anything past this is more specific and doesn't match
-                    return res;
-                }
-                node.leaves()
-            };
-            for leaf in leaves {
-                if near(&tree[*leaf].value, c) {
-                    res.append(&mut recurse(tree, *leaf, c, near))
-                }
-            }
-            res
-        }
-        recurse(&self, 0, c, near)
-    }
-
-    pub fn replace(&mut self, branch: usize, mut new_leaves: Tree<L>, new_branch: L) {
-        self.nodes[branch] = Some(Leaf::with_val(new_branch));
-        for leaf in new_leaves[0].leaves().to_vec() {
-            self.push_tree(branch, new_leaves.remove(leaf))
-        }
-    }
-
-    pub fn ancestors(&self, leaf: usize) -> Vec<usize> {
-        let mut res = Vec::new();
-        if let Some(b) = self[leaf].branch {
-            res.append(&mut self.ancestors(b));
-            res.push(b);
+        };
+        let vert = Vertex {
+            index,
+            val: vert,
+            edges: Vec::new(),
+        };
+        if index == self.verts.len() {
+            self.verts.push(Some(vert));
         } else {
-            res.push(leaf);
+            self.verts[index] = Some(vert);
         }
-        res
+        index
     }
 
-    pub fn descendants(&self, leaf: usize) -> Vec<usize> {
-        let mut res = Vec::new();
-        for leaf in self[leaf].leaves() {
-            res.push(*leaf);
-            res.append(&mut self.descendants(*leaf));
-        }
-        res
+    /// Removes a vertex, preserving indices.
+    /// # Returns
+    /// The removed vertex and all edges to/from it.
+    pub fn rem_vert(&mut self, index: usize) -> (Vertex<V>, Vec<Edge<E>>) {
+        let vert = self.verts[index].take().unwrap();
+        let edges = vert
+            .edges(&self)
+            .map(|e| e.index)
+            .collect::<Vec<_>>()
+            .drain(0..)
+            .map(|e| self.rem_edge(e))
+            .collect::<Vec<_>>();
+        self.empty_v.push(index);
+        (vert, edges)
     }
-}
 
-impl<L: Debug> Debug for Tree<L> {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        use std::fmt::Error;
-        fn tab(depth: usize) -> String {
-            let mut res = String::new();
-            for _i in 0..depth {
-                res = res.add("|  ")
+    pub fn insert_edge(
+        &mut self,
+        start: usize,
+        weight: E,
+        end: usize,
+        f_pos: Option<usize>,
+        t_pos: Option<usize>,
+    ) -> usize {
+        let index = {
+            match self.empty_e.pop() {
+                Some(i) => i,
+                None => self.edges.len(),
             }
-            res
+        };
+        let edge = Edge {
+            index,
+            weight,
+            verts: (start, end),
+        };
+        if index == self.edges.len() {
+            self.edges.push(Some(edge));
+        } else {
+            self.edges[index] = Some(edge);
         }
-        fn recurse<L: Debug>(
-            tree: &Tree<L>,
-            f: &mut Formatter,
-            branch: usize,
-            depth: usize,
-        ) -> Result<(), Error> {
-            writeln!(f, "{}{} :: {:?}", tab(depth), branch, tree[branch].value).unwrap();
-            for leaf in tree[branch].leaves() {
-                recurse(tree, f, *leaf, depth + 1)?
+        for (i, (vert, pos)) in [(start, f_pos), (end, t_pos)].iter().enumerate() {
+            if start == end && i != 0 {
+                break;
             }
-            Ok(())
+            let vert = self.vert_mut(*vert);
+            let at = match pos {
+                Some(p) => std::cmp::min(*p, vert.edges.len()),
+                None => vert.edges.len(),
+            };
+            vert.edges.insert(at, index);
         }
-        recurse(self, f, 0, 0)
-    }
-}
-
-impl<L> Index<usize> for Tree<L> {
-    type Output = Leaf<L>;
-    fn index(&self, index: usize) -> &Leaf<L> {
-        self.nodes[index].as_ref().unwrap()
-    }
-}
-
-impl<L> IndexMut<usize> for Tree<L> {
-    fn index_mut(&mut self, index: usize) -> &mut Leaf<L> {
-        self.nodes[index].as_mut().unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_test() -> Tree<usize> {
-        let mut res = Tree::with_root(0);
-        res.push(0, 1);
-        res.push(1, 2);
-        res.push(1, 3);
-        res.push(0, 4);
-        res.push(4, 5);
-        res.push(4, 6);
-        res.push(1, 7);
-        res.push(1, 8);
-        res
+        index
     }
 
-    #[test]
-    fn with_root() {
-        println!("{:?}", Tree::with_root(0))
+    pub fn add_edge(&mut self, start: usize, weight: E, end: usize) -> usize {
+        self.insert_edge(start, weight, end, None, None)
     }
 
-    #[test]
-    fn print() {
-        println!("{:?}", make_test())
+    pub fn set_edge(&mut self, start: usize, weight: E, end: usize) -> (usize, Option<E>) {
+        self.replace_edge(start, weight, end, |e| {
+            e.verts == (start, end) || (!F::DIR && e.verts == (end, start))
+        })
     }
 
-    #[test]
-    fn remove() {
-        let mut tree = make_test();
-        println!("Base:\n{:?}", tree);
-        let rem = tree.remove(1);
-        println!("Removed:\n{:?}", rem);
-        println!("Result:\n{:?}", tree);
-        tree.clean();
-        println!("Cleaned:\n{:?}", tree);
+    pub fn replace_edge(
+        &mut self,
+        start: usize,
+        mut weight: E,
+        end: usize,
+        pred: impl FnMut(&&Edge<E>) -> bool,
+    ) -> (usize, Option<E>) {
+        match self.vert(start).edges(&self).find(pred).map(|e| e.index) {
+            Some(index) => {
+                let edge = self.edge_mut(index);
+                std::mem::swap(&mut edge.weight, &mut weight);
+                (edge.index, Some(weight))
+            }
+            None => (self.add_edge(start, weight, end), None),
+        }
+    }
+
+    /// Remove an edge, preserving indices.
+    pub fn rem_edge(&mut self, index: usize) -> Edge<E> {
+        let edge = self.edges[index].take().unwrap();
+        self.empty_e.push(index);
+        for vert in &[edge.verts.0, edge.verts.1] {
+            if let Some(vert) = self.verts[*vert].as_mut() {
+                vert.edges
+                    .remove(vert.edges.iter().position(|e| *e == edge.index).unwrap());
+            }
+        }
+        edge
+    }
+
+    /// Moves verts & edges into empty cells until there are no empty cells.
+    /// Does not preserve indices.
+    pub fn compress(&mut self) -> Converter {
+        unimplemented!()
+    }
+
+    /// Add another graph to this one as its own disconnected region.
+    /// # Returns
+    /// New indices of added vertices, in the same order in which they were in the old graph.
+    pub fn merge(&mut self, _other: Self) -> Converter {
+        unimplemented!()
+    }
+
+    /// Split disconnected graph into connected regions.
+    pub fn split(self) -> Converter {
+        unimplemented!()
+    }
+
+    /// Creates a new graph by removing a region from self.
+    pub fn isolate(&mut self, _index: usize) -> (Self, Converter) {
+        unimplemented!()
     }
 }
