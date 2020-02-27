@@ -67,6 +67,10 @@ impl<V> Vertex<V> {
         }
     }
 
+    pub fn swap(&mut self, n: &mut V) {
+        std::mem::swap(&mut self.val, n);
+    }
+
     // pub fn edges_mut<'e, E>(
     //     &self,
     //     graph: &'e mut Graph<V, E>,
