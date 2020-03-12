@@ -1,4 +1,5 @@
 use super::*;
+use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
 pub struct Tree<V>(pub Graph<V, (), Directed>);
@@ -70,7 +71,51 @@ impl<V> Tree<V> {
 }
 
 impl<V: Debug> Debug for Tree<V> {
-    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        unimplemented!()
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn dbg<V: Debug>(
+            tree: &Tree<V>,
+            f: &mut std::fmt::Formatter,
+            current: usize,
+            level: usize,
+        ) -> std::fmt::Result {
+            let tab = level * 4;
+            let children = tree.children(current);
+            if children.is_empty() {
+                writeln!(f, "{:tab$}{:?},", "", tree[current], tab = tab)?;
+            } else {
+                writeln!(f, "{:tab$}{:?} <", "", tree[current], tab = tab)?;
+                for child in tree.children(current) {
+                    dbg(tree, f, child, level + 1)?;
+                }
+                writeln!(f, "{:tab$}>,", "", tab = tab)?;
+            }
+            Ok(())
+        }
+        dbg(self, f, 0, 0)
+    }
+}
+
+impl<V: Display> Display for Tree<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fn disp<V: Display>(
+            tree: &Tree<V>,
+            f: &mut std::fmt::Formatter,
+            current: usize,
+            level: usize,
+        ) -> std::fmt::Result {
+            let tab = level * 4;
+            let children = tree.children(current);
+            if children.is_empty() {
+                writeln!(f, "{:tab$}{},", "", tree[current], tab = tab)?;
+            } else {
+                writeln!(f, "{:tab$}{} <", "", tree[current], tab = tab)?;
+                for child in tree.children(current) {
+                    disp(tree, f, child, level + 1)?;
+                }
+                writeln!(f, "{:tab$}>,", "", tab = tab)?;
+            }
+            Ok(())
+        }
+        disp(self, f, 0, 0)
     }
 }
